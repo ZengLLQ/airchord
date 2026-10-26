@@ -5,6 +5,8 @@ import {
   Hand,
   RotateCcw,
   Sliders,
+  Volume2,
+  VolumeX,
   Zap,
 } from 'lucide-react';
 import { CHORD_REGISTRY } from '../../audio/chordRegistry';
@@ -30,22 +32,47 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [savedBanner, setSavedBanner] = useState(false);
 
   useEffect(() => {
+    let mounted = true;
     const service = new CameraService();
     service.getAvailableCameras().then((devices) => {
-      setAvailableCameras(devices);
+      if (mounted) {
+        setAvailableCameras(devices);
+      }
     });
-    return () => service.dispose();
+    return () => {
+      mounted = false;
+      service.dispose();
+    };
   }, []);
+
+  useEffect(() => {
+    if (!savedBanner) return;
+    const timer = setTimeout(() => setSavedBanner(false), 2000);
+    return () => clearTimeout(timer);
+  }, [savedBanner]);
 
   const handleSaveNotice = () => {
     setSavedBanner(true);
-    setTimeout(() => setSavedBanner(false), 2000);
   };
 
   const handleMappingChange = (fingerCount: number, newChordId: string) => {
-    const updated = settings.chordMappings.map((m) =>
-      m.gestureFingerCount === fingerCount ? { ...m, chordId: newChordId } : m
-    );
+    const existing = settings.chordMappings.find((m) => m.chordId === newChordId);
+    let updated;
+    if (existing && existing.gestureFingerCount !== fingerCount) {
+      const oldChordId =
+        settings.chordMappings.find((m) => m.gestureFingerCount === fingerCount)?.chordId ||
+        'c-major';
+      updated = settings.chordMappings.map((m) => {
+        if (m.gestureFingerCount === fingerCount) return { ...m, chordId: newChordId };
+        if (m.gestureFingerCount === existing.gestureFingerCount)
+          return { ...m, chordId: oldChordId };
+        return m;
+      });
+    } else {
+      updated = settings.chordMappings.map((m) =>
+        m.gestureFingerCount === fingerCount ? { ...m, chordId: newChordId } : m
+      );
+    }
     onUpdateSettings({ chordMappings: updated });
     handleSaveNotice();
   };
@@ -220,6 +247,30 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Overall Tracking Sensitivity */}
+            <div className="space-y-2 md:col-span-2 bg-[#1B1F24] p-4 rounded-xl border border-[#292E35]">
+              <div className="flex justify-between text-xs font-mono">
+                <span className="text-[#9299A3]">OVERALL TRACKING SENSITIVITY</span>
+                <span className="text-[#C8F169]">{Math.round(settings.strumSensitivity * 100)}%</span>
+              </div>
+              <input
+                type="range"
+                min="0.1"
+                max="1.0"
+                step="0.05"
+                value={settings.strumSensitivity}
+                onChange={(e) => {
+                  onUpdateSettings({ strumSensitivity: parseFloat(e.target.value) });
+                  handleSaveNotice();
+                }}
+                className="w-full h-1.5 bg-[#292E35] accent-[#C8F169] rounded cursor-pointer"
+                aria-label="Overall tracking sensitivity"
+              />
+              <p className="text-[11px] text-[#9299A3]">
+                Scales speed and displacement thresholds dynamically. Higher sensitivity enables effortless strumming on subtle hand gestures.
+              </p>
+            </div>
+
             {/* Min Strum Velocity */}
             <div className="space-y-2">
               <div className="flex justify-between text-xs font-mono">
@@ -342,8 +393,46 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </select>
             </div>
 
-            {/* Audio Engine Status */}
+            {/* Master Volume */}
             <div className="bg-[#1B1F24] p-4 rounded-xl border border-[#292E35] space-y-2">
+              <div className="flex items-center justify-between text-xs font-mono">
+                <span className="text-[#9299A3]">MASTER VOLUME</span>
+                <span className="text-[#C8F169]">{Math.round(settings.masterVolume * 100)}%</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onUpdateSettings({ masterVolume: settings.masterVolume === 0 ? 0.75 : 0 });
+                    handleSaveNotice();
+                  }}
+                  className="p-1.5 rounded-lg bg-[#14171B] border border-[#292E35] text-[#9299A3] hover:text-[#F5F6F7] transition-colors"
+                  title={settings.masterVolume === 0 ? 'Unmute' : 'Mute'}
+                >
+                  {settings.masterVolume === 0 ? (
+                    <VolumeX className="w-4 h-4 text-[#FF6B6B]" />
+                  ) : (
+                    <Volume2 className="w-4 h-4 text-[#C8F169]" />
+                  )}
+                </button>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={settings.masterVolume}
+                  onChange={(e) => {
+                    onUpdateSettings({ masterVolume: parseFloat(e.target.value) });
+                    handleSaveNotice();
+                  }}
+                  className="w-full h-1.5 bg-[#292E35] accent-[#C8F169] rounded cursor-pointer"
+                  aria-label="Master volume"
+                />
+              </div>
+            </div>
+
+            {/* Audio Engine Status */}
+            <div className="bg-[#1B1F24] p-4 rounded-xl border border-[#292E35] space-y-2 md:col-span-2">
               <label className="text-xs font-mono text-[#9299A3]">AUDIO ENGINE SAMPLES</label>
               <div className="flex items-center justify-between">
                 <span className="text-xs text-[#F5F6F7]">

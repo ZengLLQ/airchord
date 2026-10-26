@@ -196,11 +196,15 @@ export class GestureClassifier {
     const dWristMcp = Math.hypot(thumbMcp.x - wrist.x, thumbMcp.y - wrist.y);
 
     // Straightness of thumb
+    const thumbSegments =
+      Math.hypot(thumbMcp.x - thumbCmc.x, thumbMcp.y - thumbCmc.y) +
+      Math.hypot(thumbIp.x - thumbMcp.x, thumbIp.y - thumbMcp.y) +
+      Math.hypot(thumbTip.x - thumbIp.x, thumbTip.y - thumbIp.y);
+
     const thumbStraightness =
-      Math.hypot(thumbTip.x - thumbCmc.x, thumbTip.y - thumbCmc.y) /
-      (Math.hypot(thumbMcp.x - thumbCmc.x, thumbMcp.y - thumbCmc.y) +
-        Math.hypot(thumbIp.x - thumbMcp.x, thumbIp.y - thumbMcp.y) +
-        Math.hypot(thumbTip.x - thumbIp.x, thumbTip.y - thumbIp.y));
+      thumbSegments > 0.001
+        ? Math.hypot(thumbTip.x - thumbCmc.x, thumbTip.y - thumbCmc.y) / thumbSegments
+        : 0;
 
     // Normalized against palm
     const normTipPinky = dTipPinkyMcp / palmLength;

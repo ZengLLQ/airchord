@@ -41,6 +41,7 @@ export function useAirGuitar() {
     chordHandPresent: false,
     strumHandPresent: false,
     trackingLostWarning: false,
+    isAmbiguous: false,
     fps: 0,
   });
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
@@ -83,10 +84,12 @@ export function useAirGuitar() {
     handsDetected: number;
     chordHandPresent: boolean;
     strumHandPresent: boolean;
+    isAmbiguous: boolean;
   }>({
     handsDetected: 0,
     chordHandPresent: false,
     strumHandPresent: false,
+    isAmbiguous: false,
   });
 
   // Initialize persistent singletons
@@ -101,15 +104,22 @@ export function useAirGuitar() {
     });
     const handTracker = new HandTracker();
     const handAssigner = new HandAssigner({
-      chordHandRole: 'Left',
-      strumHandRole: 'Right',
-      mirrorVideo: true,
+      chordHandRole: settingsRef.current.chordHand,
+      strumHandRole: settingsRef.current.strumHand,
+      mirrorVideo: settingsRef.current.mirrorVideo,
     });
-    const chordSmoother = new LandmarkSmoother();
-    const strumSmoother = new LandmarkSmoother();
-    const gestureClassifier = new GestureClassifier();
+    const chordSmoother = new LandmarkSmoother(settingsRef.current.landmarkSmoothingAlpha);
+    const strumSmoother = new LandmarkSmoother(settingsRef.current.landmarkSmoothingAlpha);
+    const gestureClassifier = new GestureClassifier({
+      stabilityMs: settingsRef.current.gestureStabilityMs,
+      trackingLossGraceMs: settingsRef.current.trackingLossGraceMs,
+    });
     const motionAnalyzer = new MotionAnalyzer();
-    const strumDetector = new StrumDetector();
+    const strumDetector = new StrumDetector({
+      minSpeed: settingsRef.current.minStrumSpeed,
+      minDisplacement: settingsRef.current.minStrumDisplacement,
+      cooldownMs: settingsRef.current.strumCooldownMs,
+    });
 
     audioEngineRef.current = audioEngine;
     guitarSamplerRef.current = guitarSampler;
@@ -145,9 +155,11 @@ export function useAirGuitar() {
       stabilityMs: settings.gestureStabilityMs,
       trackingLossGraceMs: settings.trackingLossGraceMs,
     });
+    // Scale speed and displacement thresholds using strumSensitivity (0.1 = tighter, 1.0 = lighter touch)
+    const sensFactor = 1.35 - (settings.strumSensitivity - 0.1) * (0.7 / 0.9);
     strumDetectorRef.current?.updateConfig({
-      minSpeed: settings.minStrumSpeed,
-      minDisplacement: settings.minStrumDisplacement,
+      minSpeed: settings.minStrumSpeed * sensFactor,
+      minDisplacement: settings.minStrumDisplacement * sensFactor,
       cooldownMs: settings.strumCooldownMs,
     });
     audioEngineRef.current?.setVolume(settings.masterVolume);
@@ -194,6 +206,12 @@ export function useAirGuitar() {
 
       try {
         const detectedHands = tracker.detect(video, now);
+        // If null, the video frame has not changed since last inference tick.
+        // Skip downstream processing to avoid resetting smoothers, detectors, or zeroing hands.
+        if (detectedHands === null) {
+          return;
+        }
+
         latestHandsRef.current = detectedHands;
 
         if (assigner) {
@@ -250,17 +268,20 @@ export function useAirGuitar() {
           const prevPresence = lastPublishedTrackingStateRef.current;
           const chordPresent = assignment.chordHand !== null;
           const strumPresent = assignment.strumHand !== null;
+          const isAmbiguous = assignment.isAmbiguous;
           const handsCount = detectedHands.length;
 
           if (
             prevPresence.handsDetected !== handsCount ||
             prevPresence.chordHandPresent !== chordPresent ||
-            prevPresence.strumHandPresent !== strumPresent
+            prevPresence.strumHandPresent !== strumPresent ||
+            prevPresence.isAmbiguous !== isAmbiguous
           ) {
             lastPublishedTrackingStateRef.current = {
               handsDetected: handsCount,
               chordHandPresent: chordPresent,
               strumHandPresent: strumPresent,
+              isAmbiguous,
             };
             setTrackingStatus((prev) => ({
               ...prev,
@@ -268,6 +289,7 @@ export function useAirGuitar() {
               chordHandPresent: chordPresent,
               strumHandPresent: strumPresent,
               trackingLostWarning: handsCount < 2,
+              isAmbiguous,
             }));
           }
         }
@@ -355,8 +377,22 @@ export function useAirGuitar() {
       chordHandPresent: false,
       strumHandPresent: false,
       trackingLostWarning: false,
+      isAmbiguous: false,
       fps: 0,
     });
+  }, []);
+
+  /**
+   * Recalibrates tracking: resets smoother history, motion analysis,
+   * strum detector, and gesture classifier states.
+   */
+  const recalibrate = useCallback(() => {
+    chordSmootherRef.current?.reset();
+    strumSmootherRef.current?.reset();
+    motionAnalyzerRef.current?.reset();
+    strumDetectorRef.current?.reset();
+    gestureClassifierRef.current?.reset();
+    fpsCounterRef.current.frames = 0;
   }, []);
 
   /**
@@ -426,6 +462,7 @@ export function useAirGuitar() {
     latestMotionRef,
     startInstrument,
     stopInstrument,
+    recalibrate,
     updateSettings,
     selectChordManual,
     triggerStrumManual,

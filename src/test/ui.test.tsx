@@ -119,10 +119,53 @@ describe('AirChord UI Component Suite', () => {
   it('handles volume control adjustments', () => {
     render(<App />);
 
-    const volumeSlider = screen.getByLabelText('Master volume');
+    const volumeSliders = screen.getAllByLabelText('Master volume');
+    expect(volumeSliders.length).toBeGreaterThan(0);
+    const volumeSlider = volumeSliders[0];
     fireEvent.change(volumeSlider, { target: { value: '0.4' } });
 
     expect((volumeSlider as HTMLInputElement).value).toBe('0.4');
+  });
+
+  it('triggers recalibrate on button click and provides visual confirmation', () => {
+    render(<App />);
+
+    const recalibrateBtn = screen.getByTitle(/Recalibrate tracking baseline/i);
+    expect(recalibrateBtn).toBeInTheDocument();
+    fireEvent.click(recalibrateBtn);
+
+    expect(screen.getByText('Recalibrated!')).toBeInTheDocument();
+  });
+
+  it('renders tracking sensitivity slider in Settings and updates value', async () => {
+    render(<App />);
+
+    // Navigate to Settings
+    fireEvent.click(screen.getByRole('button', { name: /settings/i }));
+
+    const sensitivitySlider = await screen.findByLabelText('Overall tracking sensitivity');
+    expect(sensitivitySlider).toBeInTheDocument();
+
+    fireEvent.change(sensitivitySlider, { target: { value: '0.75' } });
+    expect((sensitivitySlider as HTMLInputElement).value).toBe('0.75');
+    expect(screen.getByText('75%')).toBeInTheDocument();
+  });
+
+  it('swaps chord mappings when duplicate chord is selected in settings to prevent duplicates', async () => {
+    render(<App />);
+
+    // Navigate to Settings
+    fireEvent.click(screen.getByRole('button', { name: /settings/i }));
+
+    // Find select elements for gestures
+    const selects = await screen.findAllByRole('combobox');
+    // Finger 1 is currently C Major (c-major)
+    // Finger 2 is currently G Major (g-major)
+    // Change Finger 1 to G Major -> Finger 2 should automatically swap to C Major
+    fireEvent.change(selects[0], { target: { value: 'g-major' } });
+
+    expect((selects[0] as HTMLSelectElement).value).toBe('g-major');
+    expect((selects[1] as HTMLSelectElement).value).toBe('c-major');
   });
 
   it('toggles diagnostics debug overlay', () => {

@@ -22,7 +22,7 @@ export class HandTracker {
       } catch (err) {
         console.warn('Local wasm resolver failed, falling back to CDN...', err);
         vision = await FilesetResolver.forVisionTasks(
-          'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/wasm'
+          'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.1.1/wasm'
         );
       }
 
@@ -65,16 +65,17 @@ export class HandTracker {
 
   /**
    * Performs real-time inference on a video frame.
-   * Discards stale or duplicate video frames and enforces monotonic timestamps.
+   * Returns null if the video frame has not changed (avoids resetting downstream tracking state on 60Hz/120Hz displays).
+   * Discards duplicate video frames and enforces monotonic timestamps.
    */
-  public detect(videoElement: HTMLVideoElement, timestamp: number): TrackedHand[] {
+  public detect(videoElement: HTMLVideoElement, timestamp: number): TrackedHand[] | null {
     if (!this.landmarker || videoElement.readyState < 2) {
       return [];
     }
 
-    // Skip if the video frame has not changed
-    if (videoElement.currentTime === this.lastVideoTime) {
-      return [];
+    // Skip if the video frame has not changed since last inference tick
+    if (this.lastVideoTime !== -1 && videoElement.currentTime === this.lastVideoTime) {
+      return null;
     }
     this.lastVideoTime = videoElement.currentTime;
 
@@ -95,7 +96,10 @@ export class HandTracker {
       const trackedHands: TrackedHand[] = results.landmarks.map((rawLandmarks, index) => {
         const handednessInfo = results.handednesses?.[index]?.[0];
         const categoryName = handednessInfo?.categoryName;
-        const handedness: Handedness = categoryName === 'Right' ? 'Right' : 'Left';
+        // MediaPipe assumes mirrored selfie camera input. Since getUserMedia supplies
+        // unmirrored frames, MediaPipe's reported categoryName is inverted relative to physical hands:
+        // 'Left' indicates physical Right hand, 'Right' indicates physical Left hand.
+        const handedness: Handedness = categoryName === 'Left' ? 'Right' : 'Left';
         const score = handednessInfo?.score ?? 0.8;
 
         return {

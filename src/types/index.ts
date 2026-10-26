@@ -92,6 +92,7 @@ export interface TrackingStatus {
   chordHandPresent: boolean;
   strumHandPresent: boolean;
   trackingLostWarning: boolean;
+  isAmbiguous: boolean;
   fps: number;
 }
 

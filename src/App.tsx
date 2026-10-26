@@ -26,6 +26,7 @@ export function App() {
     latestMotionRef,
     startInstrument,
     stopInstrument,
+    recalibrate,
     updateSettings,
     selectChordManual,
     triggerStrumManual,
@@ -68,6 +69,8 @@ export function App() {
         triggerStrumManual('up');
       } else if (e.key.toLowerCase() === 'd') {
         updateSettings({ debugMode: !settings.debugMode });
+      } else if (e.key.toLowerCase() === 'r') {
+        recalibrate();
       }
     };
 
@@ -77,6 +80,7 @@ export function App() {
     isPlaying,
     startInstrument,
     stopInstrument,
+    recalibrate,
     selectChordManual,
     triggerStrumManual,
     updateSettings,
@@ -123,9 +127,11 @@ export function App() {
             motionRef={latestMotionRef}
             onStart={startInstrument}
             onStop={stopInstrument}
+            onRecalibrate={recalibrate}
             onSwapHands={swapHandRoles}
             onSelectChord={selectChordManual}
             onTriggerStrum={triggerStrumManual}
+            onVolumeChange={(vol) => updateSettings({ masterVolume: vol })}
           />
         </div>
 
@@ -155,6 +161,7 @@ export function App() {
           <span><kbd className="px-1.5 py-0.5 rounded bg-[#14171B] border border-[#292E35] text-[#F5F6F7]">1–5</kbd> Chords</span>
           <span><kbd className="px-1.5 py-0.5 rounded bg-[#14171B] border border-[#292E35] text-[#F5F6F7]">↓ / ↑</kbd> Strums</span>
           <span><kbd className="px-1.5 py-0.5 rounded bg-[#14171B] border border-[#292E35] text-[#F5F6F7]">D</kbd> Diagnostics</span>
+          <span><kbd className="px-1.5 py-0.5 rounded bg-[#14171B] border border-[#292E35] text-[#F5F6F7]">R</kbd> Recalibrate</span>
         </div>
         <div className="text-[10px] opacity-75">
           AirChord • Audio Synthesizer & Computer Vision

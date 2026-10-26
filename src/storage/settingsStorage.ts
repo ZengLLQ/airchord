@@ -1,5 +1,5 @@
 import { DEFAULT_CHORD_MAPPINGS } from '../audio/chordRegistry';
-import type { InstrumentSettings } from '../types';
+import type { Handedness, InstrumentSettings } from '../types';
 
 const STORAGE_KEY = 'airchord_user_settings_v1';
 
@@ -28,9 +28,15 @@ export function loadSettings(): InstrumentSettings {
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object') return { ...DEFAULT_SETTINGS };
 
+    const chordHand: Handedness = parsed.chordHand === 'Right' ? 'Right' : 'Left';
+    let strumHand: Handedness = parsed.strumHand === 'Left' ? 'Left' : 'Right';
+    if (chordHand === strumHand) {
+      strumHand = chordHand === 'Left' ? 'Right' : 'Left';
+    }
+
     return {
-      chordHand: parsed.chordHand === 'Right' ? 'Right' : 'Left',
-      strumHand: parsed.strumHand === 'Left' ? 'Left' : 'Right',
+      chordHand,
+      strumHand,
       mirrorVideo: typeof parsed.mirrorVideo === 'boolean' ? parsed.mirrorVideo : DEFAULT_SETTINGS.mirrorVideo,
       strumSensitivity:
         typeof parsed.strumSensitivity === 'number'

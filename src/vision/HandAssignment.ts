@@ -41,25 +41,28 @@ export class HandAssigner {
       };
     }
 
-    // Helper: determine estimated physical handedness of a hand
-    // MediaPipe reports handedness from camera POV:
-    // Physical right hand facing camera appears on camera's left, so MediaPipe often labels it 'Left'.
-    // Furthermore, screen x position is very reliable in practice:
-    // If mirrored: physical left hand is on screen left (x < 0.5), physical right hand is on screen right (x >= 0.5).
-    // If not mirrored: physical left hand is on screen right (x >= 0.5), physical right hand is on screen left (x < 0.5).
-    const estimateHandSide = (hand: TrackedHand): Handedness => {
+    const estimatePhysicalHand = (hand: TrackedHand): Handedness => {
       const wristX = hand.landmarks[0]?.x ?? 0.5;
-      if (this.config.mirrorVideo) {
-        // Mirrored: left side of screen corresponds to user's physical left
-        return wristX < 0.5 ? 'Left' : 'Right';
-      } else {
-        return wristX >= 0.5 ? 'Left' : 'Right';
+      // In camera coordinates (camera facing user):
+      // When mirrored: Camera right (wristX > 0.5) corresponds to user's physical Left
+      // When natural/unmirrored: Camera left (wristX < 0.5) corresponds to user's physical Left
+      const spatialEstimate: Handedness = this.config.mirrorVideo
+        ? (wristX > 0.5 ? 'Left' : 'Right')
+        : (wristX < 0.5 ? 'Left' : 'Right');
+
+      // If hand has high detection score and reliable anatomical handedness:
+      if (hand.score >= 0.7 && hand.handedness) {
+        // Near center boundary (0.42 - 0.58), trust anatomical handedness
+        if (wristX >= 0.42 && wristX <= 0.58) {
+          return hand.handedness;
+        }
       }
+      return spatialEstimate;
     };
 
     if (detectedHands.length === 1) {
       const singleHand = detectedHands[0];
-      const estimatedHand = estimateHandSide(singleHand);
+      const estimatedHand = estimatePhysicalHand(singleHand);
 
       if (estimatedHand === chordRole) {
         return {
@@ -84,36 +87,21 @@ export class HandAssigner {
     const hand1 = detectedHands[0];
     const hand2 = detectedHands[1];
 
-    const side1 = estimateHandSide(hand1);
-    const side2 = estimateHandSide(hand2);
+    const x1 = hand1.landmarks[0]?.x ?? 0.5;
+    const x2 = hand2.landmarks[0]?.x ?? 0.5;
 
-    let chordHand: TrackedHand | null = null;
-    let strumHand: TrackedHand | null = null;
-    let isAmbiguous = false;
+    // Physical Left vs Right determined by mirroring configuration
+    const physicalLeftHand = this.config.mirrorVideo
+      ? (x1 >= x2 ? hand1 : hand2)
+      : (x1 <= x2 ? hand1 : hand2);
+    const physicalRightHand = this.config.mirrorVideo
+      ? (x1 >= x2 ? hand2 : hand1)
+      : (x1 <= x2 ? hand2 : hand1);
 
-    if (side1 !== side2) {
-      // Clear spatial separation
-      chordHand = side1 === chordRole ? hand1 : hand2;
-      strumHand = side1 === strumRole ? hand1 : hand2;
-    } else {
-      // Both hands detected on same side: evaluate horizontal order
-      const x1 = hand1.landmarks[0]?.x ?? 0;
-      const x2 = hand2.landmarks[0]?.x ?? 0;
+    const isAmbiguous = Math.abs(x1 - x2) < 0.12; // Hands overlapping
 
-      if (this.config.mirrorVideo) {
-        // More to the left = Left hand, more to the right = Right hand
-        const leftHand = x1 < x2 ? hand1 : hand2;
-        const rightHand = x1 < x2 ? hand2 : hand1;
-        chordHand = chordRole === 'Left' ? leftHand : rightHand;
-        strumHand = strumRole === 'Right' ? rightHand : leftHand;
-      } else {
-        const leftHand = x1 > x2 ? hand1 : hand2;
-        const rightHand = x1 > x2 ? hand2 : hand1;
-        chordHand = chordRole === 'Left' ? leftHand : rightHand;
-        strumHand = strumRole === 'Right' ? rightHand : leftHand;
-      }
-      isAmbiguous = Math.abs(x1 - x2) < 0.12; // Overlapping
-    }
+    const chordHand = chordRole === 'Left' ? physicalLeftHand : physicalRightHand;
+    const strumHand = strumRole === 'Right' ? physicalRightHand : physicalLeftHand;
 
     return {
       chordHand,
@@ -123,4 +111,14 @@ export class HandAssigner {
       isAmbiguous,
     };
   }
+}
+
+/**
+ * Convenience functional wrapper for hand assignment.
+ */
+export function assignHands(
+  detectedHands: TrackedHand[],
+  config: HandAssignmentConfig
+): HandAssignment {
+  return new HandAssigner(config).assignHands(detectedHands);
 }

@@ -72,7 +72,10 @@ src/
 │   ├── fixtures/
 │   │   └── handLandmarks.ts  # Deterministic 21-point landmark fixtures
 │   ├── audioEngine.test.ts   # AudioEngine & GuitarSampler unit tests
+│   ├── cameraService.test.ts # Camera lifecycle, errors, and device enumeration tests
 │   ├── chordRecognition.test.ts # GestureClassifier & hysteresis unit tests
+│   ├── handAssignment.test.ts # Spatial coordinate mapping and mirror compensation tests
+│   ├── landmarkSmoother.test.ts # EMA coordinate smoothing and tracking loss recovery tests
 │   ├── settingsStorage.test.ts # Storage validation & clamping unit tests
 │   ├── strumming.test.ts     # MotionAnalyzer & StrumDetector unit tests
 │   └── ui.test.tsx           # React component integration & accessibility tests
@@ -169,6 +172,7 @@ npm run test
 - <kbd>1</kbd> – <kbd>5</kbd>: Switch active chord manually (C, G, D, Em, Am)
 - <kbd>↓</kbd>: Test downstroke
 - <kbd>↑</kbd>: Test upstroke
+- <kbd>R</kbd>: Recalibrate tracking baseline
 - <kbd>D</kbd>: Toggle diagnostics overlay (displays 21-point skeleton, FPS, and velocity meter)
 
 ---

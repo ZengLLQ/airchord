@@ -75,19 +75,40 @@ export class CameraService {
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       this.currentStream = stream;
 
+      // Handle hardware disconnection via MediaStreamTrack onended
+      for (const track of stream.getVideoTracks()) {
+        track.onended = () => {
+          this.setStatus('camera-error', 'Camera device was disconnected.');
+          this.stopCamera();
+        };
+      }
+
       videoElement.srcObject = stream;
       videoElement.playsInline = true;
       videoElement.muted = true;
 
-      await new Promise<void>((resolve, reject) => {
-        videoElement.onloadedmetadata = () => {
-          videoElement
-            .play()
-            .then(() => resolve())
-            .catch((err) => reject(err));
-        };
-        videoElement.onerror = (e) => reject(e);
-      });
+      // Ensure video playback starts even if metadata is already loaded
+      if (videoElement.readyState >= 1) {
+        await videoElement.play();
+      } else {
+        await new Promise<void>((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            reject(new Error('Camera preview initialization timed out.'));
+          }, 6000);
+
+          videoElement.onloadedmetadata = () => {
+            clearTimeout(timeout);
+            videoElement
+              .play()
+              .then(() => resolve())
+              .catch((err) => reject(err));
+          };
+          videoElement.onerror = (e) => {
+            clearTimeout(timeout);
+            reject(e);
+          };
+        });
+      }
 
       this.setStatus('ready');
       return true;
@@ -120,6 +141,7 @@ export class CameraService {
   public stopCamera(): void {
     if (this.currentStream) {
       for (const track of this.currentStream.getTracks()) {
+        track.onended = null;
         track.stop();
       }
       this.currentStream = null;

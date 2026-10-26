@@ -8,9 +8,11 @@ import {
   HelpCircle,
   Loader2,
   Play,
+  RotateCcw,
   RotateCw,
   Square,
   Volume2,
+  VolumeX,
 } from 'lucide-react';
 import { CHORD_REGISTRY } from '../../audio/chordRegistry';
 import type {
@@ -41,9 +43,11 @@ interface PlayViewProps {
   motionRef: React.RefObject<MotionAnalysis | null>;
   onStart: () => void;
   onStop: () => void;
+  onRecalibrate: () => void;
   onSwapHands: () => void;
   onSelectChord: (chordId: string) => void;
   onTriggerStrum: (dir: StrumDirection) => void;
+  onVolumeChange: (vol: number) => void;
 }
 
 export const PlayView: React.FC<PlayViewProps> = ({
@@ -60,11 +64,14 @@ export const PlayView: React.FC<PlayViewProps> = ({
   motionRef,
   onStart,
   onStop,
+  onRecalibrate,
   onSwapHands,
   onSelectChord,
   onTriggerStrum,
+  onVolumeChange,
 }) => {
   const [showQuickHelp, setShowQuickHelp] = useState(false);
+  const [recalibratedNotice, setRecalibratedNotice] = useState(false);
 
   // Show quick help modal state
 
@@ -107,6 +114,23 @@ export const PlayView: React.FC<PlayViewProps> = ({
           )}
 
           <button
+            onClick={() => {
+              onRecalibrate();
+              setRecalibratedNotice(true);
+              setTimeout(() => setRecalibratedNotice(false), 1500);
+            }}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded border text-xs transition-colors ${
+              recalibratedNotice
+                ? 'bg-[#C8F169]/20 border-[#C8F169] text-[#C8F169]'
+                : 'bg-[#1B1F24] border-[#292E35] text-[#9299A3] hover:text-[#C8F169] hover:border-[#C8F169]/40'
+            }`}
+            title="Recalibrate tracking baseline (R)"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>{recalibratedNotice ? 'Recalibrated!' : 'Recalibrate'}</span>
+          </button>
+
+          <button
             onClick={onSwapHands}
             className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#1B1F24] border border-[#292E35] text-xs text-[#9299A3] hover:text-[#F5F6F7] transition-colors"
             title="Swap Left / Right Hand Roles"
@@ -146,18 +170,25 @@ export const PlayView: React.FC<PlayViewProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 flex-1">
         {/* Left / Center: Camera & Hand Tracking Feed (Cols 8) */}
         <div className="lg:col-span-8 flex flex-col bg-[#14171B] border border-[#292E35] rounded-2xl overflow-hidden relative min-h-[380px] lg:min-h-[500px]">
-          {/* Tracking Lost Warning Banner */}
-          {isPlaying && trackingStatus.handsDetected < 2 && (
-            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 bg-[#0B0D0F]/90 border border-amber-500/50 text-amber-300 px-4 py-1.5 rounded-full text-xs flex items-center gap-2 backdrop-blur-sm shadow-lg pointer-events-none animate-pulse">
-              <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
-              <span>
-                {trackingStatus.handsDetected === 0
-                  ? 'Bring both hands into camera view to play'
-                  : !trackingStatus.chordHandPresent
-                  ? `Raise ${settings.chordHand} hand to select chord`
-                  : `Position ${settings.strumHand} hand to strum`}
-              </span>
-            </div>
+          {/* Tracking Lost / Ambiguity Warning Banner */}
+          {isPlaying && (
+            trackingStatus.isAmbiguous ? (
+              <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 bg-[#0B0D0F]/90 border border-amber-500/80 text-amber-300 px-4 py-1.5 rounded-full text-xs flex items-center gap-2 backdrop-blur-sm shadow-lg pointer-events-none animate-pulse">
+                <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
+                <span>Hands are overlapping — separate your hands for accurate strumming</span>
+              </div>
+            ) : trackingStatus.handsDetected < 2 ? (
+              <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 bg-[#0B0D0F]/90 border border-amber-500/50 text-amber-300 px-4 py-1.5 rounded-full text-xs flex items-center gap-2 backdrop-blur-sm shadow-lg pointer-events-none animate-pulse">
+                <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
+                <span>
+                  {trackingStatus.handsDetected === 0
+                    ? 'Bring both hands into camera view to play'
+                    : !trackingStatus.chordHandPresent
+                    ? `Raise ${settings.chordHand} hand to select chord`
+                    : `Position ${settings.strumHand} hand to strum`}
+                </span>
+              </div>
+            ) : null
           )}
 
           {/* Strum Visual Feedback Indicator */}
@@ -213,15 +244,25 @@ export const PlayView: React.FC<PlayViewProps> = ({
           {isPlaying && (
             <div className="absolute inset-x-0 bottom-3 px-4 flex justify-between pointer-events-none z-10 select-none">
               <div className="bg-[#0B0D0F]/80 border border-[#292E35] rounded-lg px-3 py-1.5 backdrop-blur-sm text-xs flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-[#C8F169]" />
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    trackingStatus.chordHandPresent ? 'bg-[#C8F169]' : 'bg-[#9299A3]/40'
+                  }`}
+                />
                 <span className="text-[#9299A3]">
-                  {settings.chordHand} Side: <strong className="text-[#F5F6F7]">Chord Select</strong>
+                  {settings.chordHand} Side: <strong className="text-[#F5F6F7]">Chord Select</strong>{' '}
+                  {trackingStatus.chordHandPresent ? '(Active)' : '(Searching)'}
                 </span>
               </div>
               <div className="bg-[#0B0D0F]/80 border border-[#292E35] rounded-lg px-3 py-1.5 backdrop-blur-sm text-xs flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-cyan-400" />
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    trackingStatus.strumHandPresent ? 'bg-cyan-400' : 'bg-[#9299A3]/40'
+                  }`}
+                />
                 <span className="text-[#9299A3]">
-                  {settings.strumHand} Side: <strong className="text-[#F5F6F7]">Air Strum</strong>
+                  {settings.strumHand} Side: <strong className="text-[#F5F6F7]">Air Strum</strong>{' '}
+                  {trackingStatus.strumHandPresent ? '(Active)' : '(Searching)'}
                 </span>
               </div>
             </div>
@@ -377,6 +418,37 @@ export const PlayView: React.FC<PlayViewProps> = ({
                 <ArrowUp className="w-4 h-4 text-cyan-400" />
                 <span>Test Upstroke</span>
               </button>
+            </div>
+
+            {/* Master Volume Slider */}
+            <div className="space-y-1.5 pt-1 border-t border-[#292E35]">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-[#9299A3] flex items-center gap-1.5">
+                  <Volume2 className="w-3.5 h-3.5" />
+                  Volume: {Math.round(settings.masterVolume * 100)}%
+                </span>
+                <button
+                  onClick={() => onVolumeChange(settings.masterVolume === 0 ? 0.75 : 0)}
+                  className="text-[#9299A3] hover:text-[#F5F6F7] transition-colors p-1"
+                  title={settings.masterVolume === 0 ? 'Unmute' : 'Mute'}
+                >
+                  {settings.masterVolume === 0 ? (
+                    <VolumeX className="w-3.5 h-3.5 text-[#FF6B6B]" />
+                  ) : (
+                    <Volume2 className="w-3.5 h-3.5 text-[#C8F169]" />
+                  )}
+                </button>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={settings.masterVolume}
+                onChange={(e) => onVolumeChange(parseFloat(e.target.value))}
+                className="w-full accent-[#C8F169] h-1.5 bg-[#292E35] rounded-lg cursor-pointer"
+                aria-label="Master volume"
+              />
             </div>
 
             {/* Session Play/Stop Toggle Button */}
