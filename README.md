@@ -102,8 +102,8 @@ src/
 
 ```bash
 # Clone repository
-git clone https://github.com/AirChord/AirChord.git
-cd AirChord
+git clone https://github.com/ZengLLQ/air-chord-ver.1.git
+cd air-chord-ver.1
 
 # Install dependencies
 npm install
